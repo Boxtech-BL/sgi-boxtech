@@ -1,112 +1,103 @@
 <?php
-// Esquema MySQL (5.7 ou mais novo / MariaDB 10.2+). Os valores permitidos de cada campo
-// também são conferidos no PHP, porque o MySQL 5.7 ignora CHECK.
+// Esquema PostgreSQL (9.5 ou mais novo).
 return [
     "CREATE TABLE IF NOT EXISTS clientes (
-      id INT AUTO_INCREMENT PRIMARY KEY,
+      id SERIAL PRIMARY KEY,
       nome VARCHAR(200) NOT NULL,
-      cnpj VARCHAR(30) NULL,
-      segmento VARCHAR(200) NULL,
-      porte VARCHAR(10) NULL,
-      contato VARCHAR(400) NULL,
-      criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+      cnpj VARCHAR(30),
+      segmento VARCHAR(200),
+      porte VARCHAR(10) CHECK (porte IN ('pequeno', 'medio', 'grande')),
+      contato VARCHAR(400),
+      criado_em TIMESTAMP(0) NOT NULL DEFAULT LOCALTIMESTAMP(0)
+    )",
 
     "CREATE TABLE IF NOT EXISTS avaliacoes (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      cliente_id INT NOT NULL,
-      tipo VARCHAR(20) NOT NULL,
+      id SERIAL PRIMARY KEY,
+      cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+      tipo VARCHAR(20) NOT NULL CHECK (tipo IN ('inicial', 'encerramento', 'semestral')),
       data DATE NOT NULL,
-      status VARCHAR(20) NOT NULL DEFAULT 'rascunho',
-      consultor VARCHAR(200) NULL,
-      pesos TEXT NOT NULL,
-      observacoes TEXT NULL,
-      FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+      status VARCHAR(20) NOT NULL DEFAULT 'rascunho' CHECK (status IN ('rascunho', 'concluida')),
+      consultor VARCHAR(200),
+      pesos TEXT NOT NULL DEFAULT '{}',
+      observacoes TEXT
+    )",
 
     "CREATE TABLE IF NOT EXISTS avaliacao_itens (
-      avaliacao_id INT NOT NULL,
+      avaliacao_id INTEGER NOT NULL REFERENCES avaliacoes(id) ON DELETE CASCADE,
       pratica_id VARCHAR(40) NOT NULL,
-      nivel TINYINT NULL,
-      meta TINYINT NULL,
-      evidencias TEXT NULL,
-      observacoes TEXT NULL,
-      PRIMARY KEY (avaliacao_id, pratica_id),
-      FOREIGN KEY (avaliacao_id) REFERENCES avaliacoes(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+      nivel SMALLINT CHECK (nivel BETWEEN 1 AND 5),
+      meta SMALLINT CHECK (meta BETWEEN 1 AND 5),
+      evidencias TEXT,
+      observacoes TEXT,
+      PRIMARY KEY (avaliacao_id, pratica_id)
+    )",
 
     "CREATE TABLE IF NOT EXISTS projetos (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      cliente_id INT NOT NULL,
+      id SERIAL PRIMARY KEY,
+      cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
       nome VARCHAR(200) NOT NULL,
-      patrocinador VARCHAR(200) NULL,
-      ponto_focal VARCHAR(200) NULL,
-      gerente VARCHAR(200) NULL,
-      inicio DATE NULL,
-      status VARCHAR(20) NOT NULL DEFAULT 'ativo',
-      FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+      patrocinador VARCHAR(200),
+      ponto_focal VARCHAR(200),
+      gerente VARCHAR(200),
+      inicio DATE,
+      status VARCHAR(20) NOT NULL DEFAULT 'ativo' CHECK (status IN ('ativo', 'encerrado', 'suspenso'))
+    )",
 
     "CREATE TABLE IF NOT EXISTS projeto_fases (
-      projeto_id INT NOT NULL,
-      fase_id INT NOT NULL,
-      status VARCHAR(20) NOT NULL DEFAULT 'nao_iniciada',
-      portao_aprovado_em DATE NULL,
-      observacoes TEXT NULL,
-      PRIMARY KEY (projeto_id, fase_id),
-      FOREIGN KEY (projeto_id) REFERENCES projetos(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+      projeto_id INTEGER NOT NULL REFERENCES projetos(id) ON DELETE CASCADE,
+      fase_id INTEGER NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'nao_iniciada' CHECK (status IN ('nao_iniciada', 'em_andamento', 'concluida')),
+      portao_aprovado_em DATE,
+      observacoes TEXT,
+      PRIMARY KEY (projeto_id, fase_id)
+    )",
 
     "CREATE TABLE IF NOT EXISTS projeto_ondas (
-      projeto_id INT NOT NULL,
-      onda_id INT NOT NULL,
-      status VARCHAR(20) NOT NULL DEFAULT 'nao_iniciada',
-      praticas TEXT NOT NULL,
-      aceite_em DATE NULL,
-      PRIMARY KEY (projeto_id, onda_id),
-      FOREIGN KEY (projeto_id) REFERENCES projetos(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+      projeto_id INTEGER NOT NULL REFERENCES projetos(id) ON DELETE CASCADE,
+      onda_id INTEGER NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'nao_iniciada' CHECK (status IN ('nao_iniciada', 'desenho', 'configuracao', 'treinamento', 'piloto', 'aceita')),
+      praticas TEXT NOT NULL DEFAULT '[]',
+      aceite_em DATE,
+      PRIMARY KEY (projeto_id, onda_id)
+    )",
 
     "CREATE TABLE IF NOT EXISTS medicoes (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      cliente_id INT NOT NULL,
+      id SERIAL PRIMARY KEY,
+      cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
       indicador_id VARCHAR(40) NOT NULL,
       periodo CHAR(7) NOT NULL,
-      valor DOUBLE NOT NULL,
-      linha_base TINYINT NOT NULL DEFAULT 0,
-      observacoes TEXT NULL,
-      UNIQUE KEY medicao_unica (cliente_id, indicador_id, periodo),
-      FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+      valor DOUBLE PRECISION NOT NULL,
+      linha_base SMALLINT NOT NULL DEFAULT 0,
+      observacoes TEXT,
+      UNIQUE (cliente_id, indicador_id, periodo)
+    )",
 
     // Acesso: 'admin' = equipe Boxtech (vê todos os clientes); 'empresa' = usuário de um cliente.
     "CREATE TABLE IF NOT EXISTS usuarios (
-      id INT AUTO_INCREMENT PRIMARY KEY,
+      id SERIAL PRIMARY KEY,
       nome VARCHAR(200) NOT NULL,
-      email VARCHAR(200) NOT NULL,
+      email VARCHAR(200) NOT NULL UNIQUE,
       senha_hash VARCHAR(255) NOT NULL,
-      papel VARCHAR(10) NOT NULL,
-      cliente_id INT NULL,
-      status VARCHAR(10) NOT NULL DEFAULT 'pendente',
-      criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      decidido_em DATETIME NULL,
-      decidido_por VARCHAR(200) NULL,
-      UNIQUE KEY email_unico (email),
-      FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+      papel VARCHAR(10) NOT NULL CHECK (papel IN ('admin', 'empresa')),
+      cliente_id INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
+      status VARCHAR(10) NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'ativo', 'recusado', 'bloqueado')),
+      criado_em TIMESTAMP(0) NOT NULL DEFAULT LOCALTIMESTAMP(0),
+      decidido_em TIMESTAMP(0),
+      decidido_por VARCHAR(200),
+      CHECK (papel = 'admin' OR cliente_id IS NOT NULL)
+    )",
 
     // O cookie guarda o token; o banco guarda só o hash, para um vazamento do banco não abrir sessões.
     "CREATE TABLE IF NOT EXISTS sessoes (
       token_hash CHAR(64) PRIMARY KEY,
-      usuario_id INT NOT NULL,
-      expira_em BIGINT NOT NULL,
-      FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+      usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      expira_em BIGINT NOT NULL
+    )",
 
     // Limite de tentativas de login por IP + e-mail (a hospedagem compartilhada não guarda memória entre requisições).
     "CREATE TABLE IF NOT EXISTS tentativas_login (
       chave CHAR(64) PRIMARY KEY,
-      qtd INT NOT NULL,
+      qtd INTEGER NOT NULL,
       inicio BIGINT NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    )",
 ];

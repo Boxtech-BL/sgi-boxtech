@@ -26,15 +26,13 @@ rota('POST', '/cadastro', function (array $c) {
 
     try {
         $usuarioId = transacao(function () use ($nomeEmpresa, $cnpj, $segmento, $porte, $nome, $email, $senha) {
-            sql('INSERT INTO clientes (nome, cnpj, segmento, porte, contato) VALUES (?, ?, ?, ?, ?)',
+            $clienteId = inserir('INSERT INTO clientes (nome, cnpj, segmento, porte, contato) VALUES (?, ?, ?, ?, ?)',
                 [$nomeEmpresa, $cnpj, $segmento, $porte ?: null, "$nome <$email>"]);
-            $clienteId = (int) db()->lastInsertId();
-            sql("INSERT INTO usuarios (nome, email, senha_hash, papel, cliente_id) VALUES (?, ?, ?, 'empresa', ?)",
+            return inserir("INSERT INTO usuarios (nome, email, senha_hash, papel, cliente_id) VALUES (?, ?, ?, 'empresa', ?)",
                 [$nome, $email, password_hash($senha, PASSWORD_DEFAULT), $clienteId]);
-            return (int) db()->lastInsertId();
         });
     } catch (PDOException $e) {
-        exigir($e->getCode() !== '23000', 'Já existe um cadastro com este e-mail');
+        exigir($e->getCode() !== '23505', 'Já existe um cadastro com este e-mail');
         throw $e;
     }
 
@@ -100,7 +98,7 @@ function decidirCadastro(int $usuarioId, $decisao, string $quem): array
     exigir($u['status'] === 'pendente', 'Este cadastro já foi ' . ($u['status'] === 'ativo' ? 'liberado' : 'decidido'), 409);
     $novo = $decisao === 'aprovar' ? 'ativo' : 'recusado';
     // A condição no status evita que dois cliques simultâneos decidam duas vezes.
-    $st = sql("UPDATE usuarios SET status = ?, decidido_em = NOW(), decidido_por = ? WHERE id = ? AND status = 'pendente'", [$novo, $quem, $u['id']]);
+    $st = sql("UPDATE usuarios SET status = ?, decidido_em = LOCALTIMESTAMP(0), decidido_por = ? WHERE id = ? AND status = 'pendente'", [$novo, $quem, $u['id']]);
     exigir($st->rowCount() === 1, 'Este cadastro já foi decidido', 409);
 
     $aprovador = config()['aprovador'];
@@ -143,7 +141,7 @@ rota('POST', '/admin/usuarios/(\d+)/(aprovar|recusar|bloquear|reativar)', functi
     $quem = usuarioAtual()['email'];
     if ($decisao === 'bloquear' || $decisao === 'reativar') {
         $u = cadastroEmpresa((int) $id);
-        sql('UPDATE usuarios SET status = ?, decidido_em = NOW(), decidido_por = ? WHERE id = ?',
+        sql('UPDATE usuarios SET status = ?, decidido_em = LOCALTIMESTAMP(0), decidido_por = ? WHERE id = ?',
             [$decisao === 'bloquear' ? 'bloqueado' : 'ativo', $quem, $u['id']]);
         if ($decisao === 'bloquear') sql('DELETE FROM sessoes WHERE usuario_id = ?', [$u['id']]);
         return cadastroEmpresa($u['id']);

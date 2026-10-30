@@ -56,9 +56,9 @@ rota('GET', '/clientes', function () {
 
 rota('POST', '/clientes', function (array $c) {
     soAdmin();
-    sql('INSERT INTO clientes (nome, cnpj, segmento, porte, contato) VALUES (?, ?, ?, ?, ?)', validarCliente($c));
+    $id = inserir('INSERT INTO clientes (nome, cnpj, segmento, porte, contato) VALUES (?, ?, ?, ?, ?)', validarCliente($c));
     http_response_code(201);
-    return buscar('clientes', db()->lastInsertId());
+    return buscar('clientes', $id);
 });
 
 rota('GET', '/clientes/(\d+)', function (array $c, string $id) {
@@ -132,9 +132,8 @@ rota('POST', '/clientes/(\d+)/avaliacoes', function (array $c, string $id) {
     exigir(in_array($tipo, TIPOS_AVALIACAO, true), 'Tipo de avaliação inválido');
     $data = dataOuNulo($c['data'] ?? null) ?? date('Y-m-d');
     $novoId = transacao(function () use ($cliente, $tipo, $data, $c) {
-        sql("INSERT INTO avaliacoes (cliente_id, tipo, data, consultor, pesos) VALUES (?, ?, ?, ?, '{}')",
+        $novoId = inserir("INSERT INTO avaliacoes (cliente_id, tipo, data, consultor, pesos) VALUES (?, ?, ?, ?, '{}')",
             [$cliente['id'], $tipo, $data, textoOuNulo($c['consultor'] ?? null)]);
-        $novoId = (int) db()->lastInsertId();
         // Já cria uma linha por prática com a meta sugerida, para o questionário vir pronto.
         $ins = db()->prepare('INSERT INTO avaliacao_itens (avaliacao_id, pratica_id, meta) VALUES (?, ?, ?)');
         foreach (catalogo()['praticas'] as $p) $ins->execute([$novoId, $p['id'], metaSugerida($p['id'], $tipo)]);
@@ -190,7 +189,8 @@ rota('PUT', '/avaliacoes/(\d+)', function (array $c, string $id) {
             $up = db()->prepare('
                 INSERT INTO avaliacao_itens (avaliacao_id, pratica_id, nivel, meta, evidencias, observacoes)
                 VALUES (?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE nivel = VALUES(nivel), meta = VALUES(meta), evidencias = VALUES(evidencias), observacoes = VALUES(observacoes)');
+                ON CONFLICT (avaliacao_id, pratica_id) DO UPDATE SET
+                  nivel = EXCLUDED.nivel, meta = EXCLUDED.meta, evidencias = EXCLUDED.evidencias, observacoes = EXCLUDED.observacoes');
             foreach ($itens as $i) {
                 $up->execute([$a['id'], $i['pratica_id'], $i['nivel'] ?? null, $i['meta'] ?? null,
                     textoOuNulo($i['evidencias'] ?? null, 5000), textoOuNulo($i['observacoes'] ?? null, 5000)]);
@@ -245,11 +245,10 @@ rota('POST', '/clientes/(\d+)/projetos', function (array $c, string $id) {
     $nome = texto($c['nome'] ?? null);
     exigir($nome !== '', 'Informe o nome do projeto');
     $novoId = transacao(function () use ($cliente, $nome, $c) {
-        sql('INSERT INTO projetos (cliente_id, nome, patrocinador, ponto_focal, gerente, inicio) VALUES (?, ?, ?, ?, ?, ?)', [
+        $novoId = inserir('INSERT INTO projetos (cliente_id, nome, patrocinador, ponto_focal, gerente, inicio) VALUES (?, ?, ?, ?, ?, ?)', [
             $cliente['id'], $nome, textoOuNulo($c['patrocinador'] ?? null), textoOuNulo($c['ponto_focal'] ?? null),
             textoOuNulo($c['gerente'] ?? null), dataOuNulo($c['inicio'] ?? null),
         ]);
-        $novoId = (int) db()->lastInsertId();
         criarEstruturaProjeto($novoId);
         return $novoId;
     });
@@ -324,10 +323,17 @@ rota('DELETE', '/projetos/(\d+)', function (array $c, string $id) {
 });
 
 // ---------- Indicadores ----------
+// O pdo_pgsql devolve DOUBLE PRECISION como texto; a interface espera número.
+function medicao(?array $m): ?array
+{
+    if ($m) $m['valor'] = (float) $m['valor'];
+    return $m;
+}
+
 rota('GET', '/clientes/(\d+)/indicadores', function (array $c, string $id) {
     doCliente($id);
     buscar('clientes', $id);
-    $medicoes = linhas('SELECT * FROM medicoes WHERE cliente_id = ? ORDER BY periodo', [(int) $id]);
+    $medicoes = array_map('medicao', linhas('SELECT * FROM medicoes WHERE cliente_id = ? ORDER BY periodo', [(int) $id]));
     return array_map(function ($ind) use ($medicoes) {
         $m = array_values(array_filter($medicoes, fn($x) => $x['indicador_id'] === $ind['id']));
         $base = null;
@@ -355,11 +361,11 @@ rota('POST', '/clientes/(\d+)/medicoes', function (array $c, string $id) {
     transacao(function () use ($cliente, $indicador, $periodo, $valor, $linhaBase, $c) {
         if ($linhaBase) sql('UPDATE medicoes SET linha_base = 0 WHERE cliente_id = ? AND indicador_id = ?', [$cliente['id'], $indicador]);
         sql('INSERT INTO medicoes (cliente_id, indicador_id, periodo, valor, linha_base, observacoes) VALUES (?, ?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE valor = VALUES(valor), linha_base = VALUES(linha_base), observacoes = VALUES(observacoes)',
+             ON CONFLICT (cliente_id, indicador_id, periodo) DO UPDATE SET valor = EXCLUDED.valor, linha_base = EXCLUDED.linha_base, observacoes = EXCLUDED.observacoes',
             [$cliente['id'], $indicador, $periodo, (float) $valor, $linhaBase ? 1 : 0, textoOuNulo($c['observacoes'] ?? null, 5000)]);
     });
     http_response_code(201);
-    return linha('SELECT * FROM medicoes WHERE cliente_id = ? AND indicador_id = ? AND periodo = ?', [$cliente['id'], $indicador, $periodo]);
+    return medicao(linha('SELECT * FROM medicoes WHERE cliente_id = ? AND indicador_id = ? AND periodo = ?', [$cliente['id'], $indicador, $periodo]));
 });
 
 rota('DELETE', '/medicoes/(\d+)', function (array $c, string $id) {

@@ -55,17 +55,17 @@ function db(): PDO
     if ($pdo === null) {
         $c = config()['db'];
         $pdo = new PDO(
-            sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $c['host'], $c['porta'] ?? 3306, $c['nome']),
+            sprintf('pgsql:host=%s;port=%d;dbname=%s', $c['host'], $c['porta'] ?? 5432, $c['nome']),
             $c['usuario'],
             $c['senha'],
             [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_EMULATE_PREPARES => false, // números voltam como números
-                PDO::ATTR_STRINGIFY_FETCHES => false,
+                PDO::ATTR_STRINGIFY_FETCHES => false, // inteiros voltam como números
             ]
         );
-        $pdo->exec("SET time_zone = '-03:00'");
+        $pdo->exec("SET client_encoding = 'UTF8'");
+        $pdo->exec("SET TIME ZONE 'America/Sao_Paulo'");
     }
     return $pdo;
 }
@@ -76,6 +76,12 @@ function sql(string $consulta, array $params = []): PDOStatement
     $st = db()->prepare($consulta);
     $st->execute($params);
     return $st;
+}
+
+// INSERT que devolve o id da linha criada.
+function inserir(string $consulta, array $params = []): int
+{
+    return (int) sql($consulta . ' RETURNING id', $params)->fetchColumn();
 }
 
 function linha(string $consulta, array $params = []): ?array
@@ -116,8 +122,7 @@ function garantirAdmin(string $email, string $senha, string $nome = 'Boxtech'): 
         sql("UPDATE usuarios SET senha_hash = ?, papel = 'admin', status = 'ativo' WHERE id = ?", [$hash, $existente['id']]);
         return (int) $existente['id'];
     }
-    sql("INSERT INTO usuarios (nome, email, senha_hash, papel, status, decidido_em) VALUES (?, ?, ?, 'admin', 'ativo', NOW())", [$nome, $email, $hash]);
-    return (int) db()->lastInsertId();
+    return inserir("INSERT INTO usuarios (nome, email, senha_hash, papel, status, decidido_em) VALUES (?, ?, ?, 'admin', 'ativo', LOCALTIMESTAMP(0))", [$nome, $email, $hash]);
 }
 
 // Texto livre vindo do formulário: corta espaços e limita o tamanho.
@@ -132,7 +137,7 @@ function textoOuNulo($v, int $max = 200): ?string
     return $t === '' ? null : $t;
 }
 
-// Data AAAA-MM-DD ou nulo (o MySQL recusa texto vazio em campo DATE).
+// Data AAAA-MM-DD ou nulo (o PostgreSQL recusa texto vazio em campo DATE).
 function dataOuNulo($v): ?string
 {
     if ($v === null || $v === '') return null;

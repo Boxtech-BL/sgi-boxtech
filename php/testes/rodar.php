@@ -1,10 +1,10 @@
 <?php
-// Testes do SGI em PHP. Precisam de um MySQL/MariaDB local com um banco vazio só para teste:
-//   SGI_TESTE_DB="mysql://usuario:senha@127.0.0.1:3306/sgi_teste" php testes/rodar.php
+// Testes do SGI em PHP. Precisam de um PostgreSQL local com um banco vazio só para teste:
+//   SGI_TESTE_DB="pgsql://usuario:senha@127.0.0.1:5432/sgi_teste" php testes/rodar.php
 // O banco de teste é apagado e recriado a cada execução.
 declare(strict_types=1);
 
-$url = parse_url(getenv('SGI_TESTE_DB') ?: 'mysql://sgi:sgi@127.0.0.1:3306/sgi_teste');
+$url = parse_url(getenv('SGI_TESTE_DB') ?: 'pgsql://sgi:sgi@127.0.0.1:5432/sgi_teste');
 $raiz = dirname(__DIR__);
 $tmp = __DIR__ . '/tmp';
 @mkdir($tmp);
@@ -12,7 +12,7 @@ $logEmails = "$tmp/emails.log";
 @unlink($logEmails);
 $configTeste = "$tmp/config.php";
 file_put_contents($configTeste, '<?php return ' . var_export([
-    'db' => ['host' => $url['host'], 'porta' => $url['port'] ?? 3306, 'nome' => ltrim($url['path'], '/'),
+    'db' => ['host' => $url['host'], 'porta' => $url['port'] ?? 5432, 'nome' => ltrim($url['path'], '/'),
         'usuario' => urldecode($url['user'] ?? ''), 'senha' => urldecode($url['pass'] ?? '')],
     'url_base' => 'https://sgi.exemplo',
     'segredo' => str_repeat('segredo-de-teste-', 3),
@@ -28,9 +28,9 @@ require "$raiz/inc/maturidade.php";
 require "$raiz/inc/seguranca.php";
 
 // Banco limpo
-db()->exec('SET FOREIGN_KEY_CHECKS = 0');
-foreach (db()->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN) as $t) db()->exec("DROP TABLE `$t`");
-db()->exec('SET FOREIGN_KEY_CHECKS = 1');
+foreach (db()->query("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")->fetchAll(PDO::FETCH_COLUMN) as $t) {
+    db()->exec('DROP TABLE IF EXISTS "' . $t . '" CASCADE');
+}
 passthru(PHP_BINARY . ' ' . escapeshellarg("$raiz/instalar.php"), $saida);
 if ($saida !== 0) exit("Instalação falhou\n");
 

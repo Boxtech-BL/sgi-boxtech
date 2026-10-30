@@ -1,10 +1,10 @@
 <?php
 // Copie este arquivo para config.php e preencha. Nunca publique o config.php no GitHub.
 return [
-    // Banco MySQL criado no painel da Locaweb (Hospedagem > Banco de dados).
+    // Banco PostgreSQL criado no painel da Locaweb (Hospedagem > Banco de dados).
     'db' => [
-        'host' => 'localhost',          // na Locaweb é algo como "nome-do-banco.mysql.dbaas.com.br"
-        'porta' => 3306,
+        'host' => 'localhost',          // use o endereço do servidor que o painel mostra para o banco
+        'porta' => 5432,
         'nome' => 'sgi',
         'usuario' => '',
         'senha' => '',

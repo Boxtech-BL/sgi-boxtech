@@ -1,6 +1,6 @@
 # SGI Boxtech em PHP
 
-Versão do SGI Boxtech feita para rodar direto na hospedagem compartilhada da Locaweb (PHP + MySQL), sem Node, sem Docker e sem instalar bibliotecas. Tem as mesmas funções da versão Node que fica na raiz do repositório:
+Versão do SGI Boxtech feita para rodar direto na hospedagem compartilhada da Locaweb (PHP + PostgreSQL), sem Node, sem Docker e sem instalar bibliotecas. Tem as mesmas funções da versão Node que fica na raiz do repositório:
 
 | Módulo | Funcionalidades |
 | --- | --- |
@@ -12,12 +12,12 @@ Versão do SGI Boxtech feita para rodar direto na hospedagem compartilhada da Lo
 | Indicadores | 8 indicadores, linha de base, medições mensais e evolução |
 | Framework | Consulta da escala, fases, ondas e práticas |
 
-Requisitos: PHP 8.0 ou mais novo (com PDO MySQL, que a Locaweb já traz) e um banco MySQL 5.7+ ou MariaDB 10.2+.
+Requisitos: PHP 8.0 ou mais novo com a extensão PDO PostgreSQL (`pdo_pgsql`) e um banco PostgreSQL 9.5 ou mais novo.
 
 ## Como instalar na Locaweb
 
 1. **Versão do PHP.** No painel da hospedagem, confira se o site usa PHP 8.0 ou mais novo.
-2. **Banco de dados.** No painel, crie um banco MySQL. Anote o endereço do servidor (host), o nome do banco, o usuário e a senha.
+2. **Banco de dados.** No painel, crie um banco PostgreSQL. Anote o endereço do servidor (host), a porta (normalmente 5432), o nome do banco, o usuário e a senha. Se o seu plano não mostrar a opção PostgreSQL, confirme com o suporte da Locaweb.
 3. **Arquivos.** Envie o conteúdo desta pasta `php/` por FTP (ou pelo gerenciador de arquivos do painel) para uma pasta do site, por exemplo `public_html/sgi/`. O sistema fica em `https://www.boxtech.com.br/sgi/`. Se preferir um subdomínio (`sgi.boxtech.com.br`), crie o subdomínio no painel e envie os arquivos para a pasta dele. A pasta `testes/` não precisa ir para o servidor.
 4. **Configuração.** No servidor, copie `config.exemplo.php` para `config.php` e preencha:
    - `db`: os dados do banco do passo 2.
@@ -25,7 +25,7 @@ Requisitos: PHP 8.0 ou mais novo (com PDO MySQL, que a Locaweb já traz) e um ba
    - `segredo`: um texto aleatório de 32 caracteres ou mais (por exemplo, o resultado de `openssl rand -hex 32`, ou uma senha longa gerada no gerenciador de senhas).
    - `admin_senha_inicial`: a senha que a Boxtech vai usar para entrar com boxtech@boxtech.com.br.
    - `email`: a conta que envia os e-mails (veja abaixo).
-5. **Instalação.** Abra `https://.../sgi/instalar.php` no navegador. A página confere a conexão, cria as tabelas e o administrador.
+5. **Instalação.** Abra `https://.../sgi/instalar.php` no navegador. A página confere a conexão, cria as tabelas e o administrador. Se aparecer "could not find driver", a extensão `pdo_pgsql` não está ativa no PHP da hospedagem: ative no painel (configurações do PHP) ou peça ao suporte.
 6. **Limpeza.** Apague o valor de `admin_senha_inicial` no `config.php` e apague o `instalar.php` do servidor.
 7. **Pronto.** Abra o SGI e entre com boxtech@boxtech.com.br. No site da Boxtech, basta um botão ou link "Área do cliente" apontando para o endereço do SGI.
 
@@ -49,14 +49,14 @@ api.php                          entrada da API: api.php?r=/clientes/1 (não pre
 instalar.php                     cria as tabelas e o administrador
 config.exemplo.php               modelo do config.php
 inc/base.php                     configuração, banco (PDO) e utilitários
-inc/esquema.php                  tabelas MySQL
+inc/esquema.php                  tabelas PostgreSQL
 inc/catalogo.json                conteúdo do framework (gerado de src/catalogo.js)
 inc/maturidade.php               regras de pontuação
 inc/seguranca.php                senhas, sessões, links assinados e limite de tentativas
 inc/email.php                    envio de e-mail (SMTP próprio, sem bibliotecas)
 inc/acesso.php                   cadastro, login e aprovação
 inc/rotas.php                    clientes, avaliações, projetos e indicadores
-testes/rodar.php                 testes (precisa de um MySQL local)
+testes/rodar.php                 testes (precisa de um PostgreSQL local)
 ```
 
 As rotas são as mesmas da versão Node (veja o README da raiz), trocando `/api/...` por `api.php?r=/...`.
@@ -82,8 +82,8 @@ A interface (`app.js`, `estilo.css`, `index.html`) é a mesma da versão Node, c
 
 ```bash
 # banco vazio só para teste (é apagado a cada execução)
-mysql -uroot -e "CREATE DATABASE sgi_teste; CREATE USER 'sgi'@'localhost' IDENTIFIED BY 'sgi'; GRANT ALL ON sgi_teste.* TO 'sgi'@'localhost';"
-SGI_TESTE_DB="mysql://sgi:sgi@127.0.0.1:3306/sgi_teste" php php/testes/rodar.php
+sudo -u postgres psql -c "CREATE USER sgi PASSWORD 'sgi'" -c "CREATE DATABASE sgi_teste OWNER sgi"
+SGI_TESTE_DB="pgsql://sgi:sgi@127.0.0.1:5432/sgi_teste" php php/testes/rodar.php
 ```
 
 Os testes sobem o servidor embutido do PHP e repetem os cenários da versão Node: regras de maturidade, cadastro e liberação pelo link, isolamento entre empresas, proteções de login e o fluxo completo de avaliação, projeto e indicadores.

@@ -1,5 +1,5 @@
 <?php
-// Instalação: cria as tabelas no MySQL e o administrador da Boxtech.
+// Instalação: cria as tabelas no PostgreSQL e o administrador da Boxtech.
 // Abra https://.../instalar.php uma vez depois de preencher o config.php (ou rode: php instalar.php).
 // Pode rodar de novo sem perder dados; depois do primeiro acesso, apague este arquivo do servidor.
 declare(strict_types=1);
@@ -11,7 +11,7 @@ $ok = true;
 try {
     $cfg = config();
     db();
-    $mensagens[] = 'Conexão com o banco MySQL: ok (versão ' . db()->query('SELECT VERSION()')->fetchColumn() . ').';
+    $mensagens[] = 'Conexão com o banco PostgreSQL: ok (' . db()->query('SHOW server_version')->fetchColumn() . ').';
     instalarEsquema();
     $mensagens[] = 'Tabelas criadas ou já existentes: ok.';
 

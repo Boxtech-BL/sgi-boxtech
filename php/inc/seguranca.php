@@ -91,7 +91,7 @@ function loginBloqueado(string $chave): bool
 function loginFalhou(string $chave): void
 {
     sql('DELETE FROM tentativas_login WHERE inicio < ?', [time() - JANELA_TENTATIVAS]);
-    sql('INSERT INTO tentativas_login (chave, qtd, inicio) VALUES (?, 1, ?) ON DUPLICATE KEY UPDATE qtd = qtd + 1', [$chave, time()]);
+    sql('INSERT INTO tentativas_login (chave, qtd, inicio) VALUES (?, 1, ?) ON CONFLICT (chave) DO UPDATE SET qtd = tentativas_login.qtd + 1', [$chave, time()]);
 }
 
 function limparTentativas(string $chave): void

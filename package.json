@@ -1,0 +1,20 @@
+{
+  "name": "sgi-boxtech",
+  "version": "0.1.0",
+  "description": "SGI Boxtech: avaliação de maturidade, projetos de implantação e indicadores de gestão de TIC (PMBOK + ITIL 4)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --no-warnings server.js",
+    "dev": "node --no-warnings --watch server.js",
+    "demo": "node --no-warnings scripts/demo.js",
+    "test": "node --no-warnings --test"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "express": "^4.22.3"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  }
+}

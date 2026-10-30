@@ -1,0 +1,66 @@
+# Testa o SGI em PHP e publica a pasta php/ na hospedagem da Locaweb por FTP
+# a cada push no main que mexa em php/ (ou manualmente, em Actions > Run workflow).
+#
+# Cadastre em Settings > Secrets and variables > Actions:
+#   Secrets:   LOCAWEB_FTP_SERVIDOR (ex.: ftp.boxtech.com.br), LOCAWEB_FTP_USUARIO, LOCAWEB_FTP_SENHA
+#   Variables (opcionais): LOCAWEB_PASTA (padrão ./public_html/sgi/), LOCAWEB_FTP_PROTOCOLO (ftp ou ftps; padrão ftp)
+#
+# O config.php não está no repositório e nunca é enviado nem apagado: ele é criado uma vez no servidor.
+name: Publicar SGI PHP na Locaweb
+
+on:
+  push:
+    branches: [main]
+    paths: ['php/**', '.github/workflows/publicar-locaweb.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: publicar-locaweb
+  cancel-in-progress: false
+
+jobs:
+  testes:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sgi
+          POSTGRES_PASSWORD: sgi
+          POSTGRES_DB: sgi_teste
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U sgi" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: pdo_pgsql, curl, mbstring
+      - name: Testes do SGI em PHP
+        env:
+          SGI_TESTE_DB: pgsql://sgi:sgi@127.0.0.1:5432/sgi_teste
+        run: php php/testes/rodar.php
+
+  publicar:
+    needs: testes
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: locaweb
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enviar por FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.LOCAWEB_FTP_SERVIDOR }}
+          username: ${{ secrets.LOCAWEB_FTP_USUARIO }}
+          password: ${{ secrets.LOCAWEB_FTP_SENHA }}
+          protocol: ${{ vars.LOCAWEB_FTP_PROTOCOLO || 'ftp' }}
+          local-dir: ./php/
+          server-dir: ${{ vars.LOCAWEB_PASTA || './public_html/sgi/' }}
+          exclude: |
+            **/.git*
+            **/.git*/**
+            testes/**
+            README.md
+            config.php

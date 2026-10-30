@@ -1,5 +1,6 @@
 # Testa o SGI em PHP e publica a pasta php/ na hospedagem da Locaweb por FTP
 # a cada push no main que mexa em php/ (ou manualmente, em Actions > Run workflow).
+# Em pull requests, só roda os testes.
 #
 # Cadastre em Settings > Secrets and variables > Actions:
 #   Secrets:   LOCAWEB_FTP_SERVIDOR (ex.: ftp.boxtech.com.br), LOCAWEB_FTP_USUARIO, LOCAWEB_FTP_SENHA
@@ -11,6 +12,8 @@ name: Publicar SGI PHP na Locaweb
 on:
   push:
     branches: [main]
+    paths: ['php/**', '.github/workflows/publicar-locaweb.yml']
+  pull_request:
     paths: ['php/**', '.github/workflows/publicar-locaweb.yml']
   workflow_dispatch:
 
@@ -44,7 +47,7 @@ jobs:
 
   publicar:
     needs: testes
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     environment: locaweb
     steps:

@@ -15,6 +15,10 @@ npm test
 
 Variáveis: `PORT` (padrão 3000) e `SGI_DB` (arquivo do banco, padrão `sgi.db`).
 
+## Versão em PHP (hospedagem compartilhada)
+
+A pasta [`php/`](php/README.md) tem o mesmo SGI em PHP + MySQL, para rodar direto na hospedagem compartilhada da Locaweb (sem Node). As instruções de instalação estão em [php/README.md](php/README.md).
+
 ## O que o MVP faz
 
 | Módulo | Funcionalidades |

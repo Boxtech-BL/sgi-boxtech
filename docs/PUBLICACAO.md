@@ -21,6 +21,17 @@ O SGI roda como uma aplicação Node.js própria. A forma recomendada de colocá
 
 Hospedagens compartilhadas que só rodam PHP (a maioria dos planos de WordPress) **não** rodam o SGI. Nesse caso, o SGI vai num servidor separado e o site só ganha o link.
 
+## Na Locaweb
+
+O site da Boxtech está na Locaweb. Os planos de **Hospedagem de Sites** (compartilhada) são feitos para PHP/WordPress e não mantêm uma aplicação Node.js rodando. Por isso o caminho é:
+
+1. **Contratar um VPS Locaweb** com Linux (Ubuntu). O menor plano basta para começar: o SGI usa pouca memória e o banco é um arquivo SQLite.
+2. **Instalar Docker e nginx** no VPS (`apt install docker.io docker-compose-v2 nginx certbot python3-certbot-nginx`).
+3. **Criar o subdomínio** no Painel Locaweb, na zona DNS de boxtech.com.br: um registro **A** `sgi` apontando para o IP do VPS. O site atual continua na hospedagem de sempre.
+4. Seguir o passo a passo abaixo e a configuração do nginx.
+5. **E-mail:** se a caixa boxtech@boxtech.com.br também é da Locaweb, use o SMTP da Locaweb (no painel, em E-mail > Configurações de envio, ficam o servidor e a porta) com o usuário e a senha dessa caixa.
+6. Colocar no site o botão para https://sgi.boxtech.com.br (seção "Botão no site").
+
 ## Passo a passo com Docker
 
 ```bash

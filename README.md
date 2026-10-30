@@ -8,17 +8,18 @@ Requer Node.js 22.13 ou mais novo (usa o SQLite embutido do Node, sem banco exte
 
 ```bash
 npm install
-npm run demo   # opcional: cria um cliente de exemplo
-npm start      # http://localhost:3000
+npm run demo                        # opcional: cria um cliente de exemplo
+ADMIN_SENHA=uma-senha-forte npm start  # http://localhost:3000, entra com boxtech@boxtech.com.br
 npm test
 ```
 
-Variáveis: `PORT` (padrão 3000) e `SGI_DB` (arquivo do banco, padrão `sgi.db`).
+Sem SMTP configurado, os e-mails (inclusive o link de liberação) aparecem no console. Para publicar no site da Boxtech, com HTTPS e envio de e-mail, veja [docs/PUBLICACAO.md](docs/PUBLICACAO.md).
 
 ## O que o MVP faz
 
 | Módulo | Funcionalidades |
 | --- | --- |
+| Acesso | A empresa se cadastra, a Boxtech recebe um e-mail em boxtech@boxtech.com.br e libera ou recusa o acesso (pelo link ou pelo menu Acessos). Cada empresa vê só os próprios dados |
 | Clientes | Cadastro, nota de maturidade atual e projetos ativos de cada cliente |
 | Avaliação de maturidade | Questionário das 15 práticas em 5 áreas, nível 1 a 5 com evidências, meta por prática, pesos por área, nota por área e geral com cálculo automático, 3 lacunas críticas, gráfico radar, comparação com a avaliação anterior |
 | Relatório de maturidade | Resumo executivo, radar atual x meta, detalhe por prática e recomendações priorizadas por onda; imprime ou salva em PDF |
@@ -33,7 +34,11 @@ server.js            inicia o servidor
 src/catalogo.js      conteúdo do framework (níveis, áreas, práticas, fases, ondas, indicadores)
 src/maturidade.js    regras de pontuação (puras, testadas)
 src/db.js            esquema SQLite
-src/app.js           API REST (Express)
+src/app.js           API REST (Express) e permissões
+src/acesso.js        cadastro, login e aprovação de empresas
+src/seguranca.js     senhas (scrypt), sessões e links assinados
+src/email.js         envio de e-mail (SMTP)
+docs/PUBLICACAO.md   como publicar no site da Boxtech
 public/              interface web (HTML, CSS e JS sem build)
 scripts/demo.js      dados de exemplo
 test/                testes (node:test)
@@ -43,7 +48,13 @@ test/                testes (node:test)
 
 | Método | Rota | Descrição |
 | --- | --- | --- |
-| GET | `/api/catalogo` | Conteúdo do framework |
+| GET | `/api/catalogo` | Conteúdo do framework (público) |
+| POST | `/api/cadastro` | Cadastro de empresa (público; fica pendente) |
+| POST | `/api/login`, `/api/logout` | Entrar e sair (cookie de sessão) |
+| GET | `/api/eu` | Usuário logado |
+| GET, POST | `/api/aprovacoes/:token` | Ver e decidir um cadastro pelo link do e-mail |
+| GET | `/api/admin/usuarios` | Acessos (só Boxtech) |
+| POST | `/api/admin/usuarios/:id/(aprovar\|recusar\|bloquear\|reativar)` | Decidir acesso (só Boxtech) |
 | GET, POST | `/api/clientes` | Listar e criar clientes |
 | GET, PUT, DELETE | `/api/clientes/:id` | Cliente |
 | GET, POST | `/api/clientes/:id/avaliacoes` | Avaliações do cliente |
@@ -58,7 +69,7 @@ test/                testes (node:test)
 
 ## Próximos passos sugeridos
 
-1. Login e perfis (consultor Boxtech, ponto focal do cliente, patrocinador), com cada cliente vendo só os seus dados.
-2. Autoavaliação: o cliente preenche o questionário e anexa evidências (etapa 2 da avaliação).
+1. Recuperação de senha por e-mail e mais de um usuário por empresa.
+2. Anexar arquivos de evidência na autoavaliação.
 3. Registro de riscos, mudanças do projeto e relatório mensal de status (Fase 4).
 4. Trocar SQLite por PostgreSQL ao hospedar para vários usuários.

@@ -85,3 +85,4 @@ svg.radar .anterior { fill: none; stroke: var(--suave); stroke-width: 1.5; strok
   .painel { border: 0; padding: 0; }
 }
 td select { min-width: 140px; }
+.topo nav .usuario { margin-left: 16px; color: var(--texto); font-weight: 600; }

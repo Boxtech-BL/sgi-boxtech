@@ -3,6 +3,8 @@
 // ---------- Utilitários ----------
 const $app = document.getElementById('app');
 let CAT = null;
+let EU = null; // usuário logado
+const ADM = () => EU?.papel === 'admin';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtNota = (n) => (n == null ? '–' : n.toFixed(1).replace('.', ','));
@@ -68,6 +70,9 @@ function radar(series, rotulos, tamanho = 480) {
 // ---------- Telas ----------
 async function telaClientes() {
   const clientes = await api('GET', '/api/clientes');
+  // A empresa só tem o próprio cadastro: vai direto para ele.
+  if (!ADM() && clientes.length === 1) { location.replace(`#/clientes/${clientes[0].id}/avaliacoes`); return; }
+  const rotAcesso = { pendente: '<span class="selo alerta">aguardando liberação</span>', recusado: '<span class="selo erro">recusado</span>', bloqueado: '<span class="selo erro">bloqueado</span>' };
   $app.innerHTML = `
     <h1>Clientes</h1>
     <p class="sub">Acompanhe a maturidade de TIC, o projeto de implantação e os indicadores de cada cliente.</p>
@@ -76,10 +81,10 @@ async function telaClientes() {
         <a class="painel" href="#/clientes/${c.id}/avaliacoes" style="text-decoration:none;color:inherit">
           <div class="linha entre"><h3>${esc(c.nome)}</h3>${seloNota(c.nota_atual)}</div>
           <p class="sub" style="margin:0">${esc(c.segmento || 'Segmento não informado')} · ${esc(c.porte || 'porte não informado')}</p>
-          <p class="sub" style="margin:4px 0 0">${c.projetos_ativos} projeto(s) ativo(s)</p>
+          <p class="sub" style="margin:4px 0 0">${c.projetos_ativos} projeto(s) ativo(s) ${rotAcesso[c.acesso] || ''}</p>
         </a>`).join('') || '<p class="vazio">Nenhum cliente cadastrado ainda.</p>'}
     </div>
-    <h2>Novo cliente</h2>
+    ${ADM() ? `<h2>Novo cliente</h2>
     <form class="painel campos" id="novo-cliente">
       <label>Nome<input name="nome" required></label>
       <label>CNPJ<input name="cnpj"></label>
@@ -87,8 +92,9 @@ async function telaClientes() {
       <label>Porte<select name="porte"><option value="">–</option><option value="pequeno">Pequeno</option><option value="medio">Médio</option><option value="grande">Grande</option></select></label>
       <label>Contato<input name="contato" placeholder="nome, e-mail ou telefone"></label>
       <label><button class="primario">Cadastrar</button></label>
-    </form>`;
-  document.getElementById('novo-cliente').onsubmit = async (e) => {
+    </form>` : ''}`;
+  const form = document.getElementById('novo-cliente');
+  if (form) form.onsubmit = async (e) => {
     e.preventDefault();
     const d = dadosForm(e.target);
     if (!d.porte) delete d.porte;
@@ -208,7 +214,7 @@ async function telaAvaliacao(id) {
         <div><h1>${esc(nomeTipo(av.tipo))}</h1><p class="sub">${fmtData(av.data)} · ${av.status === 'concluida' ? 'concluída' : 'rascunho'}</p></div>
         <div class="linha nao-imprimir">
           <a class="botao" href="#/avaliacoes/${av.id}/relatorio">Relatório</a>
-          ${bloqueada() ? '<button id="reabrir">Reabrir</button>' : '<button id="salvar">Salvar</button><button id="concluir" class="primario">Concluir avaliação</button>'}
+          ${bloqueada() ? (ADM() ? '<button id="reabrir">Reabrir</button>' : '') : `<button id="salvar" ${ADM() ? '' : 'class="primario"'}>Salvar</button>${ADM() ? '<button id="concluir" class="primario">Concluir avaliação</button>' : ''}`}
         </div>
       </div>
       <div class="painel">
@@ -295,7 +301,7 @@ async function telaRelatorio(id) {
   $app.innerHTML = `
     <div class="linha entre nao-imprimir" style="margin-bottom:16px">
       <a href="#/avaliacoes/${av.id}">← Voltar à avaliação</a>
-      <button class="primario" onclick="window.print()">Imprimir / salvar PDF</button>
+      <button class="primario" id="imprimir">Imprimir / salvar PDF</button>
     </div>
     <div class="painel">
       <h1>Relatório de maturidade de TIC</h1>
@@ -326,6 +332,7 @@ async function telaRelatorio(id) {
       ${recomendacoes.length ? `<ol>${recomendacoes.map((l) => `<li><strong>${esc(l.nome)}</strong> (${l.onda ? `onda ${l.onda}` : 'base PMBOK'}): elevar do nível ${l.nivel} para ${l.meta}${itens.get(l.pratica)?.observacoes ? `. ${esc(itens.get(l.pratica).observacoes)}` : ''}</li>`).join('')}</ol>` : '<p>Todas as práticas atingiram a meta.</p>'}
       <p class="sub">As recomendações alimentam o mapa de ondas do roteiro de implantação.</p>
     </div>`;
+  document.getElementById('imprimir').onclick = () => window.print();
 }
 
 async function abaProjeto(cliente, alvo) {
@@ -347,7 +354,7 @@ async function abaProjeto(cliente, alvo) {
             <td><select name="status">${Object.entries(rotStatusFase).map(([k, v]) => `<option value="${k}" ${f.status === k ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
             <td style="font-size:13px">${esc(f.portao || 'Sem portão (corre em paralelo)')}</td>
             <td>${f.portao ? `<input type="date" name="portao_aprovado_em" value="${esc(f.portao_aprovado_em)}">` : '–'}</td>
-            <td><button data-acao="fase">Salvar</button></td>
+            <td>${ADM() ? '<button data-acao="fase">Salvar</button>' : ''}</td>
           </tr>`).join('')}</tbody>
       </table></div>
       <h3 style="margin-top:16px">Ondas ITIL (Fase 3)</h3>
@@ -358,9 +365,9 @@ async function abaProjeto(cliente, alvo) {
           <ul style="margin:0 0 10px;padding-left:18px;font-size:14px">${o.praticas.map((id) => `<li>${esc(CAT.praticas.find((x) => x.id === id)?.nome)}</li>`).join('')}</ul>
           <label>Etapa<select name="status">${Object.entries(rotStatusOnda).map(([k, v]) => `<option value="${k}" ${o.status === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
           <label>Termo de aceite em<input type="date" name="aceite_em" value="${esc(o.aceite_em)}"></label>
-          <button data-acao="onda">Salvar</button>
+          ${ADM() ? '<button data-acao="onda">Salvar</button>' : ''}
         </div>`).join('')}</div>
-    </div>`).join('') + `
+    </div>`).join('') + (ADM() ? `
     <h2>Novo projeto de implantação</h2>
     <form class="painel campos" id="novo-proj">
       <label>Nome do projeto<input name="nome" required value="Implantação de boas práticas de TIC"></label>
@@ -369,7 +376,8 @@ async function abaProjeto(cliente, alvo) {
       <label>Gerente de projeto (Boxtech)<input name="gerente"></label>
       <label>Início<input type="date" name="inicio"></label>
       <label><button class="primario">Criar projeto</button></label>
-    </form>`;
+    </form>` : (projetos.length ? '' : '<p class="vazio">O projeto de implantação aparece aqui quando a Boxtech iniciá-lo.</p>'));
+  if (!ADM()) alvo.querySelectorAll('select, input').forEach((el) => (el.disabled = true));
 
   const recarregar = () => abaProjeto(cliente, alvo);
   alvo.querySelectorAll('[data-acao=fase]').forEach((b) => (b.onclick = async () => {
@@ -384,7 +392,8 @@ async function abaProjeto(cliente, alvo) {
     const corpo = { status: box.querySelector('[name=status]').value, aceite_em: box.querySelector('[name=aceite_em]').value || null };
     try { await api('PUT', `/api/projetos/${proj}/ondas/${box.dataset.onda}`, corpo); avisar('Onda atualizada'); recarregar(); } catch (err) { avisar(err.message, true); }
   }));
-  document.getElementById('novo-proj').onsubmit = async (e) => {
+  const formProj = document.getElementById('novo-proj');
+  if (formProj) formProj.onsubmit = async (e) => {
     e.preventDefault();
     const d = dadosForm(e.target);
     if (!d.inicio) delete d.inicio;
@@ -449,14 +458,15 @@ async function abaDados(cliente, alvo) {
       <label>Contato<input name="contato" value="${esc(cliente.contato)}"></label>
       <label><button class="primario">Salvar</button></label>
     </form>
-    <p style="margin-top:24px"><button class="perigo" id="excluir">Excluir cliente e todos os dados</button></p>`;
+    ${ADM() ? '<p style="margin-top:24px"><button class="perigo" id="excluir">Excluir cliente e todos os dados</button></p>' : ''}`;
   document.getElementById('ed-cliente').onsubmit = async (e) => {
     e.preventDefault();
     const d = dadosForm(e.target);
     if (!d.porte) d.porte = null;
     try { await api('PUT', `/api/clientes/${cliente.id}`, d); avisar('Cadastro salvo'); rotear(); } catch (err) { avisar(err.message, true); }
   };
-  document.getElementById('excluir').onclick = async () => {
+  const excluir = document.getElementById('excluir');
+  if (excluir) excluir.onclick = async () => {
     if (!confirm(`Excluir ${cliente.nome}, com avaliações, projetos e indicadores? Não dá para desfazer.`)) return;
     await api('DELETE', `/api/clientes/${cliente.id}`);
     location.hash = '#/';
@@ -477,18 +487,165 @@ function telaFramework() {
       <tbody>${CAT.praticas.map((p) => `<tr><td>${esc(p.nome)}</td><td>${esc(nomeArea(p.area))}</td><td>${p.onda ? `${p.onda}. ${esc(CAT.ondas[p.onda - 1].nome)}` : 'Base PMBOK'}</td><td>${esc(p.perguntas)}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
+// ---------- Acesso ----------
+function telaLogin() {
+  $app.innerHTML = `
+    <div class="painel" style="max-width:420px;margin:40px auto">
+      <h1>Entrar no SGI</h1>
+      <p class="sub">Sistema de Gestão Integrada de TIC da Boxtech.</p>
+      <form id="login">
+        <label>E-mail<input type="email" name="email" required autocomplete="username"></label>
+        <label>Senha<input type="password" name="senha" required autocomplete="current-password"></label>
+        <button class="primario" style="width:100%">Entrar</button>
+      </form>
+      <p class="sub" style="margin:16px 0 0;text-align:center">Sua empresa ainda não tem acesso? <a href="#/cadastro">Cadastre-se</a></p>
+    </div>`;
+  document.getElementById('login').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      EU = await api('POST', '/api/login', dadosForm(e.target));
+      desenharTopo();
+      location.hash = '#/';
+    } catch (err) { avisar(err.message, true); }
+  };
+}
+
+function telaCadastro() {
+  $app.innerHTML = `
+    <div class="painel" style="max-width:640px;margin:24px auto">
+      <h1>Cadastro da empresa</h1>
+      <p class="sub">Depois do envio, a Boxtech analisa o cadastro e você recebe um e-mail quando o acesso for liberado.</p>
+      <form id="cadastro">
+        <h3>Empresa</h3>
+        <div class="campos" style="display:grid">
+          <label>Razão social ou nome<input name="empresa_nome" required maxlength="200"></label>
+          <label>CNPJ<input name="cnpj" maxlength="30"></label>
+          <label>Segmento<input name="segmento" placeholder="ex.: saúde, varejo" maxlength="200"></label>
+          <label>Porte<select name="porte"><option value="">–</option><option value="pequeno">Pequeno</option><option value="medio">Médio</option><option value="grande">Grande</option></select></label>
+        </div>
+        <h3 style="margin-top:8px">Responsável pelo acesso</h3>
+        <div class="campos" style="display:grid">
+          <label>Nome<input name="nome" required maxlength="200"></label>
+          <label>E-mail<input type="email" name="email" required autocomplete="username"></label>
+          <label>Senha (mínimo 8 caracteres)<input type="password" name="senha" required minlength="8" autocomplete="new-password"></label>
+          <label>Repita a senha<input type="password" name="senha2" required minlength="8" autocomplete="new-password"></label>
+        </div>
+        <button class="primario">Enviar cadastro</button>
+      </form>
+      <p class="sub" style="margin:16px 0 0">Já tem acesso? <a href="#/login">Entrar</a></p>
+    </div>`;
+  document.getElementById('cadastro').onsubmit = async (e) => {
+    e.preventDefault();
+    const d = dadosForm(e.target);
+    if (d.senha !== d.senha2) return avisar('As senhas não conferem', true);
+    try {
+      const r = await api('POST', '/api/cadastro', {
+        empresa: { nome: d.empresa_nome, cnpj: d.cnpj, segmento: d.segmento, porte: d.porte || null },
+        nome: d.nome, email: d.email, senha: d.senha,
+      });
+      $app.innerHTML = `<div class="painel" style="max-width:560px;margin:40px auto"><h1>Cadastro enviado</h1><p>${esc(r.mensagem)}</p><p><a href="#/login">Ir para o login</a></p></div>`;
+    } catch (err) { avisar(err.message, true); }
+  };
+}
+
+// Página aberta pelo link do e-mail enviado ao aprovador.
+async function telaAprovar(token) {
+  const desenhar = (u) => {
+    const decidido = u.status !== 'pendente';
+    $app.innerHTML = `
+      <div class="painel" style="max-width:560px;margin:40px auto">
+        <h1>Liberação de acesso</h1>
+        <table>
+          <tr><th>Empresa</th><td>${esc(u.empresa)}</td></tr>
+          <tr><th>CNPJ</th><td>${esc(u.cnpj || '–')}</td></tr>
+          <tr><th>Segmento / porte</th><td>${esc(u.segmento || '–')} · ${esc(u.porte || '–')}</td></tr>
+          <tr><th>Responsável</th><td>${esc(u.nome)} &lt;${esc(u.email)}&gt;</td></tr>
+          <tr><th>Cadastrado em</th><td>${esc(u.criado_em)}</td></tr>
+          <tr><th>Situação</th><td>${{ pendente: '<span class="selo alerta">aguardando</span>', ativo: '<span class="selo ok">liberado</span>', recusado: '<span class="selo erro">recusado</span>', bloqueado: '<span class="selo erro">bloqueado</span>' }[u.status]}</td></tr>
+        </table>
+        ${decidido ? '<p class="sub" style="margin-top:16px">Este cadastro já foi decidido.</p>' : `
+          <div class="linha" style="margin-top:16px">
+            <button class="primario" data-decisao="aprovar">Liberar acesso</button>
+            <button class="perigo" data-decisao="recusar">Recusar</button>
+          </div>`}
+      </div>`;
+    $app.querySelectorAll('[data-decisao]').forEach((b) => (b.onclick = async () => {
+      if (b.dataset.decisao === 'recusar' && !confirm('Recusar este cadastro? A empresa será avisada por e-mail.')) return;
+      try {
+        desenhar(await api('POST', `/api/aprovacoes/${encodeURIComponent(token)}`, { decisao: b.dataset.decisao }));
+        avisar(b.dataset.decisao === 'aprovar' ? 'Acesso liberado. A empresa foi avisada por e-mail.' : 'Cadastro recusado.');
+      } catch (err) { avisar(err.message, true); }
+    }));
+  };
+  desenhar(await api('GET', `/api/aprovacoes/${encodeURIComponent(token)}`));
+}
+
+async function telaAdmin() {
+  const usuarios = await api('GET', '/api/admin/usuarios');
+  const rot = { pendente: '<span class="selo alerta">aguardando</span>', ativo: '<span class="selo ok">liberado</span>', recusado: '<span class="selo erro">recusado</span>', bloqueado: '<span class="selo erro">bloqueado</span>' };
+  const acoes = (u) => {
+    if (u.papel === 'admin') return '<span class="sub">Boxtech</span>';
+    if (u.status === 'pendente') return `<button class="primario" data-id="${u.id}" data-d="aprovar">Liberar</button> <button class="perigo" data-id="${u.id}" data-d="recusar">Recusar</button>`;
+    if (u.status === 'ativo') return `<button class="perigo" data-id="${u.id}" data-d="bloquear">Bloquear</button>`;
+    return `<button data-id="${u.id}" data-d="reativar">Liberar</button>`;
+  };
+  $app.innerHTML = `
+    <h1>Acessos</h1>
+    <p class="sub">Empresas cadastradas no SGI. Novos cadastros também chegam por e-mail com o link para liberar.</p>
+    <div class="painel tabela-rolagem"><table>
+      <thead><tr><th>Empresa</th><th>Responsável</th><th>Cadastro</th><th>Situação</th><th></th></tr></thead>
+      <tbody>${usuarios.map((u) => `<tr>
+        <td>${esc(u.empresa || '–')}<br><span class="sub">${esc(u.cnpj || '')}</span></td>
+        <td>${esc(u.nome)}<br><span class="sub">${esc(u.email)}</span></td>
+        <td>${esc(u.criado_em)}</td>
+        <td>${rot[u.status]}${u.decidido_por ? `<br><span class="sub" style="font-size:12px">por ${esc(u.decidido_por)}</span>` : ''}</td>
+        <td style="text-align:right;white-space:nowrap">${acoes(u)}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+  $app.querySelectorAll('[data-d]').forEach((b) => (b.onclick = async () => {
+    if (['recusar', 'bloquear'].includes(b.dataset.d) && !confirm(`Confirmar: ${b.dataset.d}?`)) return;
+    try { await api('POST', `/api/admin/usuarios/${b.dataset.id}/${b.dataset.d}`, {}); avisar('Situação atualizada'); telaAdmin(); } catch (err) { avisar(err.message, true); }
+  }));
+}
+
+function desenharTopo() {
+  document.getElementById('menu').innerHTML = EU
+    ? `${ADM() ? '<a href="#/">Clientes</a><a href="#/admin">Acessos</a>' : '<a href="#/">Minha empresa</a>'}
+       <a href="#/framework">Framework</a>
+       <span class="usuario">${esc(EU.nome)}</span><a href="#/sair">Sair</a>`
+    : '<a href="#/login">Entrar</a><a href="#/cadastro">Cadastre-se</a>';
+}
+
 // ---------- Roteador ----------
+const PUBLICAS = ['login', 'cadastro', 'aprovar'];
+
 async function rotear() {
   const partes = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   try {
     if (!CAT) CAT = await api('GET', '/api/catalogo');
-    if (partes[0] === 'clientes' && partes[1]) await telaCliente(partes[1], partes[2] || 'avaliacoes');
+    if (EU === null) {
+      try { EU = await api('GET', '/api/eu'); } catch { EU = false; }
+      desenharTopo();
+    }
+    if (partes[0] === 'sair') {
+      await api('POST', '/api/logout', {});
+      EU = false; desenharTopo(); location.hash = '#/login'; return;
+    }
+    if (partes[0] === 'aprovar' && partes[1]) await telaAprovar(partes[1]);
+    else if (partes[0] === 'cadastro') telaCadastro();
+    else if (partes[0] === 'login' || !EU) {
+      if (!EU && !PUBLICAS.includes(partes[0])) history.replaceState(null, '', '#/login');
+      if (EU) { location.hash = '#/'; return; }
+      telaLogin();
+    }
+    else if (partes[0] === 'clientes' && partes[1]) await telaCliente(partes[1], partes[2] || 'avaliacoes');
     else if (partes[0] === 'avaliacoes' && partes[2] === 'relatorio') await telaRelatorio(partes[1]);
     else if (partes[0] === 'avaliacoes' && partes[1]) await telaAvaliacao(partes[1]);
     else if (partes[0] === 'framework') telaFramework();
+    else if (partes[0] === 'admin') await telaAdmin();
     else await telaClientes();
     window.scrollTo(0, 0);
   } catch (err) {
+    if (/Faça login/.test(err.message)) { EU = false; desenharTopo(); location.hash = '#/login'; return; }
     $app.innerHTML = `<p class="vazio">${esc(err.message)}</p>`;
   }
 }

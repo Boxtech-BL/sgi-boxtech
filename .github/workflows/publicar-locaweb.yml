@@ -40,6 +40,7 @@ jobs:
         with:
           php-version: '8.1'
           extensions: pdo_pgsql, curl, mbstring
+          coverage: none
       - name: Testes do SGI em PHP
         env:
           SGI_TESTE_DB: pgsql://sgi:sgi@127.0.0.1:5432/sgi_teste

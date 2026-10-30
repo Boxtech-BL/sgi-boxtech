@@ -3,6 +3,7 @@ const express = require('express');
 const catalogo = require('./catalogo');
 const { calcularNotas, comparar } = require('./maturidade');
 const { criarEstruturaProjeto } = require('./db');
+const { registrarAcesso } = require('./acesso');
 
 class ErroHttp extends Error {
   constructor(status, mensagem) {
@@ -25,12 +26,61 @@ const rota = (fn) => (req, res, next) => {
   }
 };
 
+const rotaAsync = (fn) => (req, res, next) => {
+  Promise.resolve()
+    .then(() => fn(req, res))
+    .then((r) => { if (r !== undefined) res.json(r); })
+    .catch(next);
+};
+
 const nivelValido = (n) => n == null || (Number.isInteger(n) && n >= 1 && n <= 5);
 
-function criarApp(db) {
+// opcoes: email (de ./email), segredo (assina os links de aprovação), urlBase (endereço público),
+// aprovador (quem libera os cadastros), cookieSeguro (true em produção, com HTTPS).
+function criarApp(db, opcoes = {}) {
+  const {
+    email, segredo, urlBase = 'http://localhost:3000', aprovador = 'boxtech@boxtech.com.br', cookieSeguro = false,
+  } = opcoes;
+  exigir(email && segredo, 'criarApp precisa de email e segredo', 500);
+
   const app = express();
-  app.use(express.json());
+  app.disable('x-powered-by');
+  app.set('trust proxy', 1); // atrás do proxy do site (nginx), para req.ip e cookies seguros
+
+  app.use((req, res, next) => {
+    res.set({
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'no-referrer',
+      'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    });
+    next();
+  });
+
+  // Proteção contra CSRF: escrita só com JSON e, se o navegador mandar Origin, do mesmo site.
+  app.use('/api', (req, res, next) => {
+    if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+    const origem = req.get('origin');
+    let mesmoSite = true;
+    try { mesmoSite = !origem || new URL(origem).host === req.get('host'); } catch { mesmoSite = false; }
+    if (!mesmoSite) return res.status(403).json({ erro: 'Origem não permitida' });
+    if (req.method !== 'DELETE' && !req.is('application/json')) return res.status(415).json({ erro: 'Envie JSON' });
+    next();
+  });
+
+  app.use(express.json({ limit: '200kb' }));
   app.use(express.static(path.join(__dirname, '..', 'public')));
+
+  app.get('/api/catalogo', rota(() => catalogo));
+  registrarAcesso(app, db, { rota, rotaAsync, exigir, email, segredo, urlBase, aprovador, cookieSeguro });
+
+  // Daqui para baixo, tudo exige login.
+  app.use('/api', (req, res, next) => (req.usuario ? next() : res.status(401).json({ erro: 'Faça login para continuar' })));
+
+  const ehAdmin = (req) => req.usuario.papel === 'admin';
+  const soAdmin = (req) => exigir(ehAdmin(req), 'Acesso restrito à Boxtech', 403);
+  // Usuário de empresa só enxerga o próprio cliente; para os outros, o registro "não existe".
+  const doCliente = (req, clienteId) => exigir(ehAdmin(req) || req.usuario.cliente_id === Number(clienteId), 'Registro não encontrado', 404);
 
   const buscar = (tabela, id) => {
     const linha = db.prepare(`SELECT * FROM ${tabela} WHERE id = ?`).get(Number(id));
@@ -38,20 +88,21 @@ function criarApp(db) {
     return linha;
   };
 
-  // ---------- Catálogo ----------
-  app.get('/api/catalogo', rota(() => catalogo));
-
   // ---------- Clientes ----------
-  app.get('/api/clientes', rota(() =>
+  app.get('/api/clientes', rota((req) =>
     db.prepare(`
       SELECT c.*,
         (SELECT a.id FROM avaliacoes a WHERE a.cliente_id = c.id ORDER BY a.data DESC, a.id DESC LIMIT 1) AS ultima_avaliacao_id,
-        (SELECT COUNT(*) FROM projetos p WHERE p.cliente_id = c.id AND p.status = 'ativo') AS projetos_ativos
-      FROM clientes c ORDER BY c.nome`).all()
+        (SELECT COUNT(*) FROM projetos p WHERE p.cliente_id = c.id AND p.status = 'ativo') AS projetos_ativos,
+        (SELECT u.status FROM usuarios u WHERE u.cliente_id = c.id ORDER BY u.id LIMIT 1) AS acesso
+      FROM clientes c
+      WHERE ? OR c.id = ?
+      ORDER BY c.nome`).all(ehAdmin(req) ? 1 : 0, req.usuario.cliente_id ?? -1)
       .map((c) => ({ ...c, nota_atual: c.ultima_avaliacao_id ? notasDaAvaliacao(c.ultima_avaliacao_id).geral : null }))
   ));
 
   app.post('/api/clientes', rota((req, res) => {
+    soAdmin(req);
     const { nome, cnpj, segmento, porte, contato } = req.body;
     exigir(nome && nome.trim(), 'Informe o nome do cliente');
     const r = db.prepare('INSERT INTO clientes (nome, cnpj, segmento, porte, contato) VALUES (?, ?, ?, ?, ?)')
@@ -60,9 +111,13 @@ function criarApp(db) {
     return buscar('clientes', r.lastInsertRowid);
   }));
 
-  app.get('/api/clientes/:id', rota((req) => buscar('clientes', req.params.id)));
+  app.get('/api/clientes/:id', rota((req) => {
+    doCliente(req, req.params.id);
+    return buscar('clientes', req.params.id);
+  }));
 
   app.put('/api/clientes/:id', rota((req) => {
+    doCliente(req, req.params.id);
     const c = buscar('clientes', req.params.id);
     const d = { ...c, ...req.body };
     exigir(d.nome && String(d.nome).trim(), 'Informe o nome do cliente');
@@ -72,6 +127,7 @@ function criarApp(db) {
   }));
 
   app.delete('/api/clientes/:id', rota((req, res) => {
+    soAdmin(req);
     buscar('clientes', req.params.id);
     db.prepare('DELETE FROM clientes WHERE id = ?').run(Number(req.params.id));
     res.status(204).end();
@@ -104,6 +160,7 @@ function criarApp(db) {
   }
 
   app.get('/api/clientes/:id/avaliacoes', rota((req) => {
+    doCliente(req, req.params.id);
     buscar('clientes', req.params.id);
     return db.prepare('SELECT * FROM avaliacoes WHERE cliente_id = ? ORDER BY data DESC, id DESC')
       .all(Number(req.params.id))
@@ -111,6 +168,7 @@ function criarApp(db) {
   }));
 
   app.post('/api/clientes/:id/avaliacoes', rota((req, res) => {
+    doCliente(req, req.params.id);
     const cliente = buscar('clientes', req.params.id);
     const { tipo = 'inicial', data = new Date().toISOString().slice(0, 10), consultor = null } = req.body;
     exigir(catalogo.tiposAvaliacao.some((t) => t.id === tipo), 'Tipo de avaliação inválido');
@@ -123,11 +181,21 @@ function criarApp(db) {
     return avaliacaoCompleta(r.lastInsertRowid);
   }));
 
-  app.get('/api/avaliacoes/:id', rota((req) => avaliacaoCompleta(req.params.id)));
+  const avaliacaoDoUsuario = (req) => {
+    const a = buscar('avaliacoes', req.params.id);
+    doCliente(req, a.cliente_id);
+    return a;
+  };
+
+  app.get('/api/avaliacoes/:id', rota((req) => avaliacaoCompleta(avaliacaoDoUsuario(req).id)));
 
   app.put('/api/avaliacoes/:id', rota((req) => {
-    const a = buscar('avaliacoes', req.params.id);
+    const a = avaliacaoDoUsuario(req);
     const { data, consultor, observacoes, pesos, status, itens } = req.body;
+    // A empresa preenche a autoavaliação; concluir (ou mexer numa concluída) é do consultor Boxtech.
+    if (!ehAdmin(req)) {
+      exigir(a.status === 'rascunho' && (status ?? 'rascunho') === 'rascunho', 'Só o consultor da Boxtech pode concluir ou reabrir a avaliação', 403);
+    }
 
     if (pesos) {
       exigir(Object.entries(pesos).every(([k, v]) => catalogo.areas.some((x) => x.id === k) && Number(v) > 0),
@@ -163,6 +231,7 @@ function criarApp(db) {
   }));
 
   app.delete('/api/avaliacoes/:id', rota((req, res) => {
+    soAdmin(req);
     buscar('avaliacoes', req.params.id);
     db.prepare('DELETE FROM avaliacoes WHERE id = ?').run(Number(req.params.id));
     res.status(204).end();
@@ -180,12 +249,14 @@ function criarApp(db) {
   }
 
   app.get('/api/clientes/:id/projetos', rota((req) => {
+    doCliente(req, req.params.id);
     buscar('clientes', req.params.id);
     return db.prepare('SELECT id FROM projetos WHERE cliente_id = ? ORDER BY id DESC')
       .all(Number(req.params.id)).map((p) => projetoCompleto(p.id));
   }));
 
   app.post('/api/clientes/:id/projetos', rota((req, res) => {
+    soAdmin(req);
     const cliente = buscar('clientes', req.params.id);
     const { nome, patrocinador = null, ponto_focal = null, gerente = null, inicio = null } = req.body;
     exigir(nome && nome.trim(), 'Informe o nome do projeto');
@@ -204,7 +275,12 @@ function criarApp(db) {
     return projetoCompleto(id);
   }));
 
-  app.get('/api/projetos/:id', rota((req) => projetoCompleto(req.params.id)));
+  app.get('/api/projetos/:id', rota((req) => {
+    doCliente(req, buscar('projetos', req.params.id).cliente_id);
+    return projetoCompleto(req.params.id);
+  }));
+  // Projeto é conduzido pela Boxtech: a empresa acompanha, não altera.
+  app.use('/api/projetos', (req, res, next) => (req.method === 'GET' || ehAdmin(req) ? next() : res.status(403).json({ erro: 'Acesso restrito à Boxtech' })));
 
   app.put('/api/projetos/:id', rota((req) => {
     const p = buscar('projetos', req.params.id);
@@ -254,6 +330,7 @@ function criarApp(db) {
 
   // ---------- Indicadores ----------
   app.get('/api/clientes/:id/indicadores', rota((req) => {
+    doCliente(req, req.params.id);
     buscar('clientes', req.params.id);
     const medicoes = db.prepare('SELECT * FROM medicoes WHERE cliente_id = ? ORDER BY periodo').all(Number(req.params.id));
     return catalogo.indicadores.map((ind) => {
@@ -270,6 +347,7 @@ function criarApp(db) {
   }));
 
   app.post('/api/clientes/:id/medicoes', rota((req, res) => {
+    doCliente(req, req.params.id);
     const cliente = buscar('clientes', req.params.id);
     const { indicador_id, periodo, valor, linha_base = false, observacoes = null } = req.body;
     exigir(catalogo.indicadores.some((i) => i.id === indicador_id), 'Indicador desconhecido');
@@ -287,7 +365,7 @@ function criarApp(db) {
   }));
 
   app.delete('/api/medicoes/:id', rota((req, res) => {
-    buscar('medicoes', req.params.id);
+    doCliente(req, buscar('medicoes', req.params.id).cliente_id);
     db.prepare('DELETE FROM medicoes WHERE id = ?').run(Number(req.params.id));
     res.status(204).end();
   }));

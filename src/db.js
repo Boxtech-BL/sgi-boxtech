@@ -74,6 +74,27 @@ CREATE TABLE IF NOT EXISTS medicoes (
   observacoes TEXT,
   UNIQUE (cliente_id, indicador_id, periodo)
 );
+
+-- Acesso: 'admin' = equipe Boxtech (vê todos os clientes); 'empresa' = usuário de um cliente.
+CREATE TABLE IF NOT EXISTS usuarios (
+  id INTEGER PRIMARY KEY,
+  nome TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  senha_hash TEXT NOT NULL,
+  papel TEXT NOT NULL CHECK (papel IN ('admin', 'empresa')),
+  cliente_id INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'ativo', 'recusado', 'bloqueado')),
+  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  decidido_em TEXT,
+  decidido_por TEXT,
+  CHECK (papel = 'admin' OR cliente_id IS NOT NULL)
+);
+
+CREATE TABLE IF NOT EXISTS sessoes (
+  token_hash TEXT PRIMARY KEY,
+  usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  expira_em INTEGER NOT NULL
+);
 `;
 
 function abrir(arquivo = process.env.SGI_DB || 'sgi.db') {
@@ -93,4 +114,16 @@ function criarEstruturaProjeto(db, projetoId) {
   }
 }
 
-module.exports = { abrir, criarEstruturaProjeto };
+// Cria (ou atualiza a senha de) um administrador da Boxtech.
+function garantirAdmin(db, { email, senha, nome = 'Boxtech' }) {
+  const { hashSenha } = require('./seguranca');
+  const existente = db.prepare('SELECT id FROM usuarios WHERE email = ?').get(email);
+  if (existente) {
+    db.prepare("UPDATE usuarios SET senha_hash = ?, papel = 'admin', status = 'ativo' WHERE id = ?").run(hashSenha(senha), existente.id);
+    return existente.id;
+  }
+  return db.prepare("INSERT INTO usuarios (nome, email, senha_hash, papel, status, decidido_em) VALUES (?, ?, ?, 'admin', 'ativo', datetime('now'))")
+    .run(nome, email, hashSenha(senha)).lastInsertRowid;
+}
+
+module.exports = { abrir, criarEstruturaProjeto, garantirAdmin };

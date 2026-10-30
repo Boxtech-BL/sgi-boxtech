@@ -1,20 +1,25 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { abrir } = require('../src/db');
+const { abrir, garantirAdmin } = require('../src/db');
 const { criarApp } = require('../src/app');
+const { criarEmail } = require('../src/email');
 const { praticas } = require('../src/catalogo');
 
-let servidor, base;
+let servidor, base, cookie;
 
 test.before(async () => {
-  servidor = criarApp(abrir(':memory:')).listen(0);
+  const db = abrir(':memory:');
+  garantirAdmin(db, { email: 'boxtech@boxtech.com.br', senha: 'senha-admin-123' });
+  servidor = criarApp(db, { email: criarEmail({ NODE_ENV: 'test' }), segredo: 'teste' }).listen(0);
   await new Promise((r) => servidor.once('listening', r));
   base = `http://127.0.0.1:${servidor.address().port}`;
+  const r = await fetch(`${base}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'boxtech@boxtech.com.br', senha: 'senha-admin-123' }) });
+  cookie = r.headers.get('set-cookie').split(';')[0];
 });
 test.after(() => servidor.close());
 
 async function req(metodo, url, corpo) {
-  const r = await fetch(base + url, { method: metodo, headers: { 'Content-Type': 'application/json' }, body: corpo && JSON.stringify(corpo) });
+  const r = await fetch(base + url, { method: metodo, headers: { 'Content-Type': 'application/json', cookie }, body: corpo && JSON.stringify(corpo) });
   return { status: r.status, corpo: r.status === 204 ? null : await r.json() };
 }
 

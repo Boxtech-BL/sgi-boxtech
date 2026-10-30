@@ -29,7 +29,7 @@ O site da Boxtech está na Locaweb. Os planos de **Hospedagem de Sites** (compar
 2. **Instalar Docker e nginx** no VPS (`apt install docker.io docker-compose-v2 nginx certbot python3-certbot-nginx`).
 3. **Criar o subdomínio** no Painel Locaweb, na zona DNS de boxtech.com.br: um registro **A** `sgi` apontando para o IP do VPS. O site atual continua na hospedagem de sempre.
 4. Seguir o passo a passo abaixo e a configuração do nginx.
-5. **E-mail:** se a caixa boxtech@boxtech.com.br também é da Locaweb, use o SMTP da Locaweb (no painel, em E-mail > Configurações de envio, ficam o servidor e a porta) com o usuário e a senha dessa caixa.
+5. **E-mail:** se a caixa boxtech@boxtech.com.br também é da Locaweb, use o SMTP da Locaweb (o servidor e a porta de envio aparecem nas configurações do e-mail no Painel Locaweb) com o usuário e a senha dessa caixa.
 6. Colocar no site o botão para https://sgi.boxtech.com.br (seção "Botão no site").
 
 ## Passo a passo com Docker

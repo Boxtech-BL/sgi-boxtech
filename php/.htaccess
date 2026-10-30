@@ -1,0 +1,23 @@
+# SGI Boxtech (Apache da hospedagem)
+DirectoryIndex index.html
+Options -Indexes
+
+# Arquivos internos e de configuração não são servidos.
+<FilesMatch "^(config\.php|config\.exemplo\.php|README\.md|\..*)$">
+  Require all denied
+</FilesMatch>
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "DENY"
+  Header always set Referrer-Policy "no-referrer"
+  Header always set Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+</IfModule>
+
+# Para forçar HTTPS, tire o # das 5 linhas abaixo (só depois de o domínio ter certificado
+# e de conferir que https://.../sgi/ abre normalmente).
+# <IfModule mod_rewrite.c>
+#   RewriteEngine On
+#   RewriteCond %{HTTPS} !=on
+#   RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+# </IfModule>

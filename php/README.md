@@ -31,6 +31,15 @@ Requisitos: PHP 8.0 ou mais novo com a extensão PDO PostgreSQL (`pdo_pgsql`) e 
 
 O `.htaccess` desta pasta impede que o `config.php` e a pasta `inc/` sejam abertos pelo navegador. Depois que o domínio tiver certificado HTTPS, tire o `#` das linhas indicadas no fim do `.htaccess` para forçar HTTPS.
 
+### Publicação automática pelo GitHub
+
+Em vez do FTP manual do passo 3, o GitHub pode enviar os arquivos sozinho a cada mudança no `main` (workflow `.github/workflows/publicar-locaweb.yml`). Ele roda os testes antes e só publica se passarem. Para ligar, em **Settings > Secrets and variables > Actions** do repositório:
+
+- Secrets: `LOCAWEB_FTP_SERVIDOR` (o endereço de FTP que o painel da Locaweb mostra, por exemplo `ftp.boxtech.com.br`), `LOCAWEB_FTP_USUARIO` e `LOCAWEB_FTP_SENHA`.
+- Variables (opcionais): `LOCAWEB_PASTA` (padrão `./public_html/sgi/`) e `LOCAWEB_FTP_PROTOCOLO` (`ftp` ou `ftps`; padrão `ftp`).
+
+Depois, em **Actions > Publicar SGI PHP na Locaweb > Run workflow**, rode a primeira vez. O `config.php` nunca é enviado nem apagado: crie-o uma vez no servidor (passo 4).
+
 ### E-mail
 
 O SGI manda três e-mails: o aviso de novo cadastro para boxtech@boxtech.com.br (com o link para liberar), e o aviso de liberado ou recusado para a empresa. Em `config.php`, escolha o `modo`:
